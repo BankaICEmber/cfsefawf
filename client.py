@@ -157,11 +157,14 @@ def main():
                 if data == "exit":
                     break
 
-                # Обработка команды cd отдельно
                 if data.startswith("cmd:"):
                     cmd = data[4:]
-                    if cmd.startswith("cd "):
-                        path = cmd[3:].strip()
+                    if cmd.startswith("cd"):
+                        # Обработка команды cd без или с параметром
+                        path = cmd[2:].strip()
+                        if not path:
+                            path = os.path.expanduser("~")
+
                         try:
                             os.chdir(path)
                             current_dir = os.getcwd()
