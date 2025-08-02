@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-SERVER_IP = "192.168.100.3"  # Укажи IP сервера
+SERVER_IP = "192.168.100.3"  # IP сервера нужно обновить под твою сеть
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
