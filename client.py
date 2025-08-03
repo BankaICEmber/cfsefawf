@@ -171,8 +171,19 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
+                    # Специальная обработка команд, содержащих nohup (запуск без ожидания)
+                    if "nohup" in cmd:
+                        try:
+                            subprocess.Popen(cmd, shell=True,
+                                             stdout=subprocess.DEVNULL,
+                                             stderr=subprocess.DEVNULL)
+                            s.send("Команда запущена через nohup".encode())
+                        except Exception as e:
+                            s.send(f"Ошибка запуска команды с nohup: {e}".encode())
+                        continue
+
+                    # Обработка команд с & в конце (фоновые команды)
                     if cmd.endswith('&'):
-                        # Фоновый запуск без ожидания
                         cmd_no_amp = cmd.rstrip('&').strip()
                         try:
                             subprocess.Popen(cmd_no_amp, shell=True,
