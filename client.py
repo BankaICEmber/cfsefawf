@@ -171,8 +171,9 @@ def main():
                             subprocess.Popen(cmd, shell=True,
                                              stdout=subprocess.DEVNULL,
                                              stderr=subprocess.DEVNULL)
-                            # Короткая задержка перед ответом, чтобы процесс успел стартовать
-                            time.sleep(0.2)
+                            # Увеличенная задержка перед отправкой подтверждения
+                            time.sleep(0.5)
+                            print("[DEBUG] Отправляю подтверждение запуска nohup команды")
                             s.send("Команда запущена через nohup".encode())
                         except Exception as e:
                             s.send(f"Ошибка запуска команды с nohup: {e}".encode())
