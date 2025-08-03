@@ -234,15 +234,20 @@ def main():
                 elif command.startswith("download:"):
                     filepath = command[len("download:"):].strip()
                     try:
+                        filesize = os.path.getsize(filepath)
+                        # Отправляем размер файла (8 байт, big endian)
+                        s.sendall(filesize.to_bytes(8, byteorder='big'))
                         with open(filepath, "rb") as f:
                             while True:
                                 chunk = f.read(BUFFER_SIZE)
                                 if not chunk:
                                     break
                                 s.sendall(chunk)
-                        s.sendall(b"__file_transfer_end__")
                     except Exception as e:
-                        s.send(f"Ошибка при чтении файла: {e}".encode(errors='ignore'))
+                        error_msg = f"Ошибка при чтении файла: {e}"
+                        err_bytes = error_msg.encode(errors='ignore')
+                        s.sendall(len(err_bytes).to_bytes(8, byteorder='big'))
+                        s.sendall(err_bytes)
 
                 elif command.startswith("upload:"):
                     filepath = command[len("upload:"):].strip()
