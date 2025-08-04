@@ -88,7 +88,7 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Запуск фоновых/nohup команд с удалением файла скрипта
+                    # Обработка команд с nohup/фоновых через setsid с указанием директории скрипта
                     if "nohup" in cmd or cmd.endswith('&'):
                         try:
                             m = re.search(r'python3\s+"([^"]+)"', cmd)
@@ -109,15 +109,7 @@ def main():
                                 shell=True,
                                 cwd=script_dir
                             )
-
-                            # Удаляем файл скрипта сразу после запуска процесса
-                            if m:
-                                try:
-                                    os.remove(script_path)
-                                except Exception:
-                                    pass
-
-                            s.send("Команда запущена через setsid с логированием и скрипт удалён.".encode())
+                            s.send("Команда запущена через setsid с логированием.".encode())
                         except Exception as e:
                             s.send(f"Ошибка запуска команды с setsid: {e}".encode())
                         continue
