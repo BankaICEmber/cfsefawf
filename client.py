@@ -3,6 +3,7 @@ import subprocess
 import os
 import sys
 import time
+import shlex  # добавлен импорт
 
 SERVER_IP = "192.168.100.3"  # Установите ваш IP сервера
 SERVER_PORT = 5000
@@ -55,9 +56,15 @@ def main():
                     # Обработка nohup
                     if "nohup" in cmd:
                         try:
-                            subprocess.Popen(cmd, shell=True,
-                                             stdout=subprocess.DEVNULL,
-                                             stderr=subprocess.DEVNULL)
+                            args = shlex.split(cmd)
+                            cwd = os.getcwd()
+                            subprocess.Popen(
+                                args,
+                                cwd=cwd,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                preexec_fn=os.setpgrp  # отделяет процесс от управляющего терминала
+                            )
                             s.send("Команда запущена через nohup".encode())
                         except Exception as e:
                             s.send(f"Ошибка запуска команды с nohup: {e}".encode())
@@ -67,9 +74,15 @@ def main():
                     if cmd.endswith('&'):
                         cmd_no_amp = cmd.rstrip('&').strip()
                         try:
-                            subprocess.Popen(cmd_no_amp, shell=True,
-                                             stdout=subprocess.DEVNULL,
-                                             stderr=subprocess.DEVNULL)
+                            args = shlex.split(cmd_no_amp)
+                            cwd = os.getcwd()
+                            subprocess.Popen(
+                                args,
+                                cwd=cwd,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                preexec_fn=os.setpgrp
+                            )
                             s.send("Команда выполнена в фоне".encode())
                         except Exception as e:
                             s.send(f"Ошибка при запуске фоновой команды: {e}".encode())
